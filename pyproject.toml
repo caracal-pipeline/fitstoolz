@@ -1,0 +1,44 @@
+[tool.poetry]
+name = "fitstools"
+version = "0.0.1"
+description = "Radio astronomy data continuum subtraction tools"
+authors = ["Sphesihle Makhathini, Mika Naidoo"]
+license = "MIT"
+readme = "README.rst"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.13"
+numpy = "^2.0"
+astropy = "^7.1.0"
+xarray = "*"
+zarr = "*"
+dask-ms = "0.2.24"
+stimela = "^2.1.2"
+
+
+#[tool.poetry.scripts]
+#imcontsub = "contsub.parser.imcontsub:runit"
+
+[tool.poetry.group.dev.dependencies]
+jupyter = "*"
+matplotlib = "*"
+
+[tool.poetry.group.tests]
+optional = true
+[tool.poetry.group.tests.dependencies]
+pytest = "8.4.1"
+flake8 = "*"
+
+
+[tool.poetry.group.docs]
+optional = true
+[tool.poetry.group.docs.dependencies]
+Sphinx = "^8.1"
+sphinx-copybutton = "*"
+furo = "*"
+sphinx-rtd-theme = "*"
+sphinx_click = "6.0.0"
