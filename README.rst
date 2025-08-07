@@ -19,8 +19,7 @@ Example Usage
 
     In[1]: from fitstools.reader import FitsData
 
-    In[2]: myfits = FitsData("example-image.fits",
-                        set_dims=["spectral", "celestial"])
+    In[2]: myfits = FitsData("example-image.fits")
            myfits.coord_names
 
     Out[2]: ['STOKES', 'FREQ', 'DEC', 'RA']
