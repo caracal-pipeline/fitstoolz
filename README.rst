@@ -21,7 +21,7 @@ Example Usage
 
     In[2]: myfits = FitsData("example-image.fits",
                         set_dims=["spectral", "celestial"])
-    myfits.coord_names
+           myfits.coord_names
 
     Out[2]: ['STOKES', 'FREQ', 'DEC', 'RA']
 
