@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "fitstools"
 version = "0.0.1"
-description = "Radio astronomy data continuum subtraction tools"
-authors = ["Sphesihle Makhathini, Mika Naidoo"]
+description = "Python libraries for interfacing with FITS data in an intuitive way"
+authors = ["Sphesihle Makhathini, Mika Naidoo, Athanaseus Ramaila"]
 license = "MIT"
 readme = "README.rst"
 
@@ -23,6 +23,14 @@ stimela = "^2.1.2"
 #[tool.poetry.scripts]
 #imcontsub = "contsub.parser.imcontsub:runit"
 
+[tool.poetry.group.zarr]
+optional = true
+[tool.poetry.group.zarr.dependencies]
+zarr = "*"
+
+
+[tool.poetry.group.dev]
+optional = true
 [tool.poetry.group.dev.dependencies]
 jupyter = "*"
 matplotlib = "*"

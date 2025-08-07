@@ -4,12 +4,13 @@ import xarray as xr
 import numpy as np
 from astropy.wcs import WCS
 from scabha.basetypes import File
+from typing import List, Dict
 from astropy.table import Table
 from astropy.coordinates import SpectralCoord
 from astropy import units
 
 class FitsData:
-    def __init__(self, fname: str, memmap: bool = True):
+    def __init__(self, fname: str, memmap: bool = True, set_dims:List[str]=None):
         self.fname = File(fname)
         if not self.fname.EXISTS:
             raise FileNotFoundError(f"Input FITS file '{fname}' does not exist")
@@ -18,14 +19,38 @@ class FitsData:
         self.phdu = self.hdulist[0]
         self.header = self.phdu.header
         self.wcs = WCS(self.header)
-        self.coord_names = self.wcs.axis_type_names[::-1]
-        self.ndim = len(self.coord_names)
         self.dim_info = self.wcs.get_axis_types()[::-1]
-        self.dshape = self.wcs.array_shape
+        self.coord_names = self.wcs.axis_type_names[::-1]
         self.coords = xr.Coordinates()
         self.open_arrays = []
         self.data = da.asarray(self.phdu.data)
-        self.data_units = self.header.get("BUNIT", "jy")
+        self.data_units = self.header.get("BUNIT", "jy").lower()
+        
+        if self.dshape != self.wcs.array_shape:
+            raise RuntimeError("Input FITS file WCS information does not match Image data")
+    
+        if set_dims:
+            self.register_dimensions(set_dims=set_dims)
+
+    def coord_index(self, name:str) -> int:
+        """
+        Returns index of given axis
+
+        Args:
+            name (str): Coordinate/axis name
+
+        Returns:
+        int : coordinate index
+        """
+        return self.coord_names.index(name)
+
+    @property 
+    def ndim(self):
+        return self.data.ndim
+
+    @property
+    def dshape(self):
+        return self.data.shape
 
     @property
     def data(self):
@@ -35,23 +60,21 @@ class FitsData:
     def data(self, value):
         self._data = value
     
-    def set_coord_attrs(self, name:str):
+    def set_coord_attrs(self, name:str, dim:str):
         """ 
         Add FITS pixel meta data to this instances coords attribute (xarray.Coordinates)
 
         Args:
             name (str): Name (or label) of coordinate to set
         """
-        
-        idx = self.coord_names.index(name)
+        idx = self.coord_index(name)
         self.coords[name].attrs = {
             "name": name,
             "pixel_size": self.pixel_scales[name],
-            "dim": self.coords[name].dims[0],
-            "ref_pixel": int(self.header[f"CRPIX{idx+1}"]),
+            "dim": dim,
+            "ref_pixel": int(self.header[f"CRPIX{self.ndim - idx }"]) - 1, # FITS indexing is 1-based
             "units": self.wcs.world_axis_units[::-1][idx],
             "size": self.dshape[idx],
-            "dim_idx": idx,
         }
     
     def register_dimensions(self, set_dims=["spectral", "celestial"]):
@@ -66,16 +89,17 @@ class FitsData:
         self.pixel_scales = {}
         pixel_scales = self.wcs.pixel_scale_matrix.diagonal()[::-1]
         
-        
-        for idx,coord in enumerate(self.coord_names):
+        names = self.coord_names 
+        for idx,coord in enumerate(names):
             self.pixel_scales[coord] = pixel_scales[idx]
             diminfo = self.dim_info[idx]
             dim = diminfo["coordinate_type"]
             dtype = diminfo["group"]
+            
             if dim == "celestial":
                 continue
             elif dim == "spectral":    
-                self.set_spectral_dimension(idx, dim not in set_dims)
+                self.set_spectral_dimension(coord, dim not in set_dims)
                 continue
                 
             dimsize = self.dshape[idx]
@@ -84,12 +108,11 @@ class FitsData:
                                 dim).array_index_to_world_values(da.arange(dimsize))
             else:
                 dimgrid = da.empty(dimsize, dtype=dtype)
+                
             self.coords[coord] = (dim,), dimgrid
+            self.set_coord_attrs(coord, dim)
             
         self.set_celestial_dimensions(empty = "celestial" not in set_dims)
-        # re-traverse to set FITS pixel meta data
-        for coord in self.coord_names:
-            self.set_coord_attrs(coord)
             
         self.dims = list(self.coords.dims)
         
@@ -100,16 +123,14 @@ class FitsData:
         Returns:
             astropy.SpectralCoord: Astropy SpectralCoord instance
         """
-        #TODO(sphe,mika) Add command-line option for the rest frequency
-        ## then it doesn't have to be in the header.
-        ## If not specified and not in header, raise an exception.
-        rest_freq_Hz = rest_freq_Hz or self.header["RESTFRQ"]
+        
+        rest_freq_Hz = rest_freq_Hz or self.spectral_restfreq
         return SpectralCoord(self.coords["VRAD"], 
                 unit=units.meter/units.second).to(units.Hz, 
                                             doppler_rest = rest_freq_Hz*units.Hz,
                                             doppler_convention="radio").value
         
-    def get_freq_from_vopt(self):
+    def get_freq_from_vopt(self, rest_freq_Hz=None):
         """
         Convert radio velocity coordinates to frequencies
 
@@ -117,10 +138,73 @@ class FitsData:
             astropy.SpectralCoord: Astropy SpectralCoord instance
         """
         
+        rest_freq_Hz = rest_freq_Hz or self.spectral_restfreq
         return SpectralCoord(self.coords["VOPT"],
                 unit=units.meter/units.second).to(units.Hz, 
-                                            doppler_rest = self.header["RESTFRQ"]*units.Hz,
+                                            doppler_rest = rest_freq_Hz*units.Hz,
                                             doppler_convention="optical").value
+
+    
+    def add_axis(self, name:str, idx:int, coord_type:str, axis_grid:np.ndarray, attrs:Dict):
+        """ Add a new axis to FITS data
+
+        Args:
+            name (str): Name of new axis. e.g, STOKES, RA, DEC
+            idx (int): index where new axis must be added
+            coord_type (str): Axis type (e.g, stokes, spectral)
+            axis_grid (np.ndarray): coordinate grid of new axis
+            attrs (Dict): Pixel meta data. Example: 
+                dict(name='STOKES', 
+                    pixel_size=1,
+                    ref_pixel=0,
+                    size=1, 
+                    units=None,
+                    dim='stokes')
+
+        Raises:
+            RuntimeError: Dimensions not matching after axis was added
+        """
+        
+        slc = [slice(None)] * (self.ndim + 1)
+        slc[idx] = da.newaxis
+        self.data = self.data[tuple(slc)]
+        self.coords[name] = (coord_type,), axis_grid
+        self.coords[name].attrs = attrs
+        self.coord_names.insert(idx, name)
+        if len(self.coord_names) != self.ndim:
+            raise RuntimeError(f"New axis '{name}' could not added")
+            
+    
+    def expand_along_axis(self, name:str , data:np.ndarray):
+        """
+        Expand data along the given dimension. 
+
+        Args:
+            name (str): Name of expansion coordinate
+            data (np.ndarray): Data slice to add along the axis. Number of dimensions 
+                must be equal or one less than the current data
+        """
+        
+        idx = self.coord_index(name)
+        if len(data.shape) == self.ndim - 1:
+            slc = [slice(None)] * self.ndim
+            slc[idx] = da.newaxis
+            data = data[tuple(slc)]
+        self.data = da.concatenate((self.data, data), axis=idx)
+        self.coords[name].attrs.update({"size": self.dshape[idx]})
+    
+    def expand_along_axis_from_files(self, name, files:List[File]):
+        idx = self.coord_index(name)
+        
+        for fname in files:
+            with fits.open(fname, memmap=True) as hdul:
+                slc = [slice(None)] * self.ndim
+                if self.ndim != hdul[0].data.ndim:
+                    slc[idx] = da.newaxis
+                slc = tuple(slc)
+                data = da.asarray(hdul[0].data[slc])
+            self.data = da.concatenate((self.data, data), axis=idx)
+            self.coords[name].attrs.update({"size": self.dshape[idx]})
 
     def register_beam_info(self):
         """
@@ -186,47 +270,22 @@ class FitsData:
         
         self.beam_info = beam_info
         return 0 
-    
-    def add_coord(self, name, dim, dimgrid):
-        self.coords[name] = dim, dimgrid
         
-    def extend_stokes(self, filename: str):
-        # read new file
-        hdulist = fits.open(filename)
-        phdu = hdulist[0]
-        axis = "STOKES"
-    
-        idx = self.coord_names.index(axis)
-        slc = [slice(None)]*self.ndim
-        slc[idx] = 0
-        axis_data = da.from_array(phdu.section[tuple(slc)])
-        
-        # extend data
-        slc[idx] = da.newaxis
-        self.data = da.concatenate((self.data, axis_data[tuple(slc)]), axis=idx)
-        
-        # update shape
-        self.dshape = self.data.shape
-        
-        # update coord
-        dim_size = self.dshape[idx]
-        self.coords[axis] = ("stokes,"), da.arange(dim_size)
-        
-    def set_spectral_dimension(self, idx, empty=False):
+    def set_spectral_dimension(self, coord_name, empty=False, rest_freq=None):
+        idx = self.coord_index(coord_name)
         dimsize = self.dshape[idx]
         
-        coord = self.coord_names[idx]
         if empty:
             dimgrid = da.zeros(dimsize, dtype=self.dim_info[idx]["group"])
         else:
             dimgrid = self.wcs.spectral.array_index_to_world_values(da.arange(dimsize))                
-        self.coords[coord] = ("spectral",), dimgrid
+        self.coords[coord_name] = ("spectral",), dimgrid
+        self.set_coord_attrs(coord_name, "spectral")
         self.nchan = dimsize
-        self.spectral_coord = coord
+        self.spectral_coord = coord_name
+        self.spectral_refpix = self.coords[coord_name].ref_pixel
         self.spectral_units = self.wcs.spectral.world_axis_units[0]
-        self.spectral_refpix = self.header.get(f"CRPIX{self.ndim - idx}")
-        self.spectral_restfreq = self.header.get("RESTFRQ", None)
-                                            
+        self.spectral_restfreq = rest_freq or self.header.get("RESTFRQ", None)
         
     def set_celestial_dimensions(self, empty:bool=True):
         """
@@ -247,8 +306,8 @@ class FitsData:
                 else:
                     raise ValueError(f"Unkown celestial dimension in WCS: {dim_number}")
                     
-        ra_dim = self.coord_names[ra_idx]
-        dec_dim = self.coord_names[dec_idx]
+        ra_dim = self.wcs.axis_type_names[::-1 ][ra_idx]
+        dec_dim = self.wcs.axis_type_names[::-1 ][dec_idx]
         ra_dimsize = self.dshape[ra_idx]
         dec_dimsize = self.dshape[dec_idx]
         dtype = self.dim_info[ra_idx]["group"]
@@ -261,8 +320,11 @@ class FitsData:
         grid = self.wcs.celestial.array_index_to_world_values(da.arange(ra_dimsize),
                                         da.arange(dec_dimsize))
         
-        self.coords[dec_dim] = ("celesstial.dec",), grid[1]
         self.coords[ra_dim] = ("celestial.ra",), grid[0]
+        self.set_coord_attrs(ra_dim, "celestial.ra")
+        
+        self.coords[dec_dim] = ("celesstial.dec",), grid[1]
+        self.set_coord_attrs(dec_dim, "celestial.dec")
 
     @property
     def data(self):
