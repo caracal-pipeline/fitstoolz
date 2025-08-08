@@ -2,6 +2,12 @@
 fitstools
 ==========
 
+.. automodule:: fitstools
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
 Python libraries for interfacing with FITS images in an intuitive way
 
 Features
