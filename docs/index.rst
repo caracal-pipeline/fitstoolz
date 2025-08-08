@@ -4,11 +4,11 @@ Welcome to fitstools's documentation!
 =====================================
 
 .. toctree::
-   :maxdepth=2
+   :maxdepth: 2
    :caption: Contents:
 
    README
-   modules
+   installation
 
 API Reference
 =============

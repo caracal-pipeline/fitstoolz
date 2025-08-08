@@ -226,13 +226,7 @@ class FitsData:
             idx (int): index where new axis must be added
             coord_type (str): Axis type (e.g, stokes, spectral)
             axis_grid (np.ndarray): coordinate grid of new axis
-            attrs (Dict): Pixel meta data. Example: 
-                dict(name='STOKES', 
-                    pixel_size=1,
-                    ref_pixel=0,
-                    size=1, 
-                    units=None,
-                    dim='stokes')
+            attrs (Dict): Pixel meta data. Example: dict(name='STOKES', pixel_size=1, ref_pixel=0, size=1, units=None, dim='stokes')
 
         Raises:
             RuntimeError: Dimensions not matching after axis was added
@@ -281,10 +275,10 @@ class FitsData:
     def register_beam_info(self):
         """
         Get FITS beam information and assign it to a self.beam_info attribute:
-        self.beam_info = {
-            "bmaj": <array>,
-            "bmin": <array>,
-            "bpa": <array>, 
+        self.beam_info = {\
+            "bmaj": <array>,\
+            "bmin": <array>,\
+            "bpa": <array>, \
         }
         """
         header = self.header

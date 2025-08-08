@@ -2,12 +2,6 @@
 fitstools
 ==========
 
-.. automodule:: fitstools
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-
 Python libraries for interfacing with FITS images in an intuitive way
 
 Features
@@ -41,5 +35,3 @@ Example Usage
     FREQ     (spectral) float64 4kB 8.803e+08 8.804e+08 ... 9.328e+08 9.329e+08
     RA       (celestial.ra) float64 800B 53.16 53.16 53.16 ... 53.1 53.1 53.1
     DEC      (celesstial.dec) float64 800B -28.16 -28.16 ... -28.11 -28.11
-
-
