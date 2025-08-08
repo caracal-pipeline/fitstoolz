@@ -246,7 +246,6 @@ class FitsData:
         self.coord_names.insert(idx, name)
         if len(self.coord_names) != self.ndim:
             raise RuntimeError(f"New axis '{name}' could not added")
-            
     
     def expand_along_axis(self, name:str , data:np.ndarray):
         """
@@ -342,7 +341,7 @@ class FitsData:
         beam_info["bpa"] = (beam_info["bpa"]*bunit).to(units.rad).value
         
         self.beam_info = beam_info
-        return 0 
+        return 
 
     @property
     def data(self):
@@ -430,8 +429,6 @@ class FitsData:
                             header=header)
         
         phdu.writeto(fname, overwrite=True)
-        
-        
     
     def __close__(self):
         self.hdulist.close()
