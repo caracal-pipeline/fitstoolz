@@ -1,6 +1,6 @@
-.. fitstools documentation master file, created by sphinx-quickstart
+.. fitstoolz documentation master file, created by sphinx-quickstart
 
-Welcome to fitstools's documentation!
+Welcome to fitstoolz's documentation!
 =====================================
 
 .. toctree::
@@ -15,7 +15,7 @@ Example Usage
 
 .. code-block:: ipython
 
-    In[1]: from fitstools.reader import FitsData
+    In[1]: from fitstoolz.reader import FitsData
 
     In[2]: myfits = FitsData("example-image.fits")
            myfits.coord_names

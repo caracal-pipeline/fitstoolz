@@ -1,10 +1,13 @@
 [tool.poetry]
-name = "fitstools"
+name = "fitstoolz"
 version = "0.0.1b1"
 description = "Python libraries for interfacing with FITS data in an intuitive way"
 authors = ["Sphesihle Makhathini, Mika Naidoo, Athanaseus Ramaila"]
 license = "MIT"
 readme = "README.rst"
+packages = [
+    {include = "fitstoolz"},
+]
 
 [build-system]
 requires = ["poetry-core"]

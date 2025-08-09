@@ -1,5 +1,5 @@
 ==========
-fitstools
+fitstoolz
 ==========
 
 Python libraries for interfacing with FITS images in an intuitive way
@@ -17,7 +17,7 @@ Example Usage
 
 .. code-block:: ipython
 
-    In[1]: from fitstools.reader import FitsData
+    In[1]: from fitstoolz.reader import FitsData
 
     In[2]: myfits = FitsData("example-image.fits")
            myfits.coord_names

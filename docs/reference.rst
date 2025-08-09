@@ -3,7 +3,7 @@
 API Reference
 =============
 
-.. automodule:: fitstools.reader
+.. automodule:: fitstoolz.reader
    :members:
    :undoc-members:
    :show-inheritance:

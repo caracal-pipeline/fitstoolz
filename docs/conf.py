@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath('..'))
 
-project = 'fitstools'
+project = 'fitstoolz'
 copyright = '2025 Wits Centre for Astrophysics'
 author = 'Sphesihle Makhathini, Mika Naidoo, Athanaseus Ramaila'
 release = '0.0.1b1'
