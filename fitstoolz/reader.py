@@ -134,7 +134,7 @@ class FitsData:
         cdelt = int(self.header.get(f"CDELT{self.ndim-idx}", 1))
         naxis = int(self.header.get(f"NAXIS{self.ndim-idx}"))
         size = cdelt*naxis
-        grid = da.arange(0,size,cdelt) 
+        grid = np.arange(0,size,cdelt) 
         shift = grid[crpix-1] + crval
         grid += shift
         
@@ -162,7 +162,6 @@ class FitsData:
         Args:
             empty (bool, optiona): Set the coordinate grids as an empty array. Defaults to True.
         """
-        
         for idx, diminfo in enumerate(self.dim_info):
             dim = diminfo["coordinate_type"]
             dim_number = diminfo["number"]
@@ -196,7 +195,6 @@ class FitsData:
         Returns:
             astropy.SpectralCoord: Astropy SpectralCoord instance
         """
-        
         rest_freq_Hz = rest_freq_Hz or self.spectral_restfreq
         return SpectralCoord(self.coords["VRAD"], 
                 unit=units.meter/units.second).to(units.Hz, 
@@ -210,7 +208,6 @@ class FitsData:
         Returns:
             astropy.SpectralCoord: Astropy SpectralCoord instance
         """
-        
         rest_freq_Hz = rest_freq_Hz or self.spectral_restfreq
         return SpectralCoord(self.coords["VOPT"],
                 unit=units.meter/units.second).to(units.Hz, 
@@ -231,7 +228,6 @@ class FitsData:
         Raises:
             RuntimeError: Dimensions not matching after axis was added
         """
-        
         slc = [slice(None)] * (self.ndim + 1)
         slc[idx] = da.newaxis
         self.data = self.data[tuple(slc)]
@@ -250,14 +246,35 @@ class FitsData:
             data (np.ndarray): Data slice to add along the axis. Number of dimensions 
                 must be equal or one less than the current data
         """
-        
         idx = self.coord_index(name)
+        dim = self.coords[name].dim
+        
         if len(data.shape) == self.ndim - 1:
             slc = [slice(None)] * self.ndim
             slc[idx] = da.newaxis
             data = data[tuple(slc)]
         self.data = da.concatenate((self.data, data), axis=idx)
-        self.coords[name].attrs.update({"size": self.dshape[idx]})
+        
+        old_grid = da.compute(self.coords[name].data)[0]
+        dpix = self.coords[name].pixel_size
+        in_ndim = data.shape[idx]
+        in_grid_start = old_grid[-1] + dpix
+        in_grid_end = in_grid_start + dpix * in_ndim
+        
+        new_grid = da.concatenate(( old_grid,
+                    da.arange(in_grid_start, in_grid_end, dpix),
+                    ),
+            )
+        
+        new_coord = (dim,), new_grid
+        coords = xr.Coordinates()
+        for coord in self.coord_names:
+            if coord == name:
+                coords[coord] = new_coord
+            else:
+                coords[coord] = self.coords[coord]
+        self.coords = coords
+        self.set_coord_attrs(name, dim)
     
     def expand_along_axis_from_files(self, name, files:List[File]):
         idx = self.coord_index(name)
@@ -269,8 +286,7 @@ class FitsData:
                     slc[idx] = da.newaxis
                 slc = tuple(slc)
                 data = da.asarray(hdul[0].data[slc])
-            self.data = da.concatenate((self.data, data), axis=idx)
-            self.coords[name].attrs.update({"size": self.dshape[idx]})
+            self.expand_along_axis(name, data)
 
     def register_beam_info(self):
         """
@@ -376,9 +392,8 @@ class FitsData:
         
         if len(data_slice) == 0:
             data_slice = [slice(None)]*self.ndim
-            
-        data = da.asarray(self.data[tuple(data_slice)])
         
+        data = da.asarray(self.data[tuple(data_slice)])
         xds = xr.DataArray(data,
             coords = self.coords,
             attrs = {

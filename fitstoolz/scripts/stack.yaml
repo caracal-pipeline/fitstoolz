@@ -1,0 +1,7 @@
+libs:
+  _include: (fitstoolz.scripts.cabs)fitstoolz-stack.yaml
+
+inputs:
+  _use: libs.cabs.fitstoolz-stack.inputs
+outputs:
+  _use: libs.cabs.fitstoolz-stack.outputs

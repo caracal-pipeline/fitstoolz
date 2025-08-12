@@ -22,10 +22,8 @@ zarr = "*"
 dask-ms = "0.2.24"
 stimela = "^2.1.2"
 
-
-
-#[tool.poetry.scripts]
-#imcontsub = "contsub.parser.imcontsub:runit"
+[tool.poetry.scripts]
+fitstoolz = "fitstoolz.scripts:cli"
 
 [tool.poetry.group.zarr]
 optional = true

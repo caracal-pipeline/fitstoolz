@@ -1,21 +1,21 @@
 import click
-from scabha.schema_utils import clickify_parameters, paramfile_loader
+from scabha.basetypes import File
 import glob
 import os
 
+
 thisdir = os.path.dirname(__file__)
 
-source_files = glob.glob(f"{thisdir}/library/*.yaml")
+source_files = glob.glob(f"{thisdir}/cabs/*.yaml")
 sources = [File(item) for item in source_files]
-parserfile = File(f"{thisdir}/{command}.yaml")
-
-stack_config = paramfile_loader(parserfile, sources)[command]
-
 
 @click.group()
-def fitstool():
+def cli():
     pass
 
-@fitstool.command()
-@clickify_parameters(config)
-def stack(fname)
+def add_commands():
+    # Importing the commands in a function to avoid a circular import error
+    from .stack import stack
+    
+add_commands()
+

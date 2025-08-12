@@ -1,0 +1,44 @@
+cabs:
+  fitstoolz-stack:
+    command: fitstoolz-stack
+    info:  Python libraries for interfacing with FITS images in an intuitive way (https://fitstoolz.readthedocs.io/en/latest/)
+
+    inputs:
+      fname:
+        info: List of FITS files to stack
+        dtype: List[File]
+        required: true
+        policies:
+          positional: true
+          repeat: "[]"
+      axis:
+        info: Stack the files along this axis
+        dtype: str
+      ref-pixel:
+        info: Reference pixel for resulting FITS image (CRPIX). Zero-index. 
+        default: 0
+      memmap:
+        info: memmap option to parse to astropy.io.fits.open()
+        dtype: bool
+        default: true
+      ra-chunks:
+        info: RA chunking
+        dtype: int
+        default: 0
+      dec-chunks:
+        info: Dec chunking
+        dtype: int
+        default: 0
+      spectral-chunks:
+        info: spectral chunking
+        dtype: int
+        default: 0
+      temporal-chunks:
+        info: RA chunking
+        dtype: int
+        default: 0
+    outputs:
+      stacked-fits:
+        info: Path of output image 
+        dtype: File
+        required: true
