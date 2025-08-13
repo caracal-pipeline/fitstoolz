@@ -8,14 +8,20 @@ from typing import List, Dict, Any
 from astropy.table import Table
 from astropy.coordinates import SpectralCoord
 from astropy import units
+import warnings
+from astropy.utils.exceptions import AstropyWarning
 
 class FitsData:
-    def __init__(self, fname: str, memmap: bool = True):
+    def __init__(self, fname: str, memmap: bool = True, suppress_FITS_warnings=True):
         self.fname = File(fname)
         if not self.fname.EXISTS:
             raise FileNotFoundError(f"Input FITS file '{fname}' does not exist")
+        
+        with warnings.catch_warnings():
+            if suppress_FITS_warnings:
+                warnings.simplefilter('ignore', AstropyWarning)
+            self.hdulist = fits.open(self.fname, memmap=memmap)
             
-        self.hdulist = fits.open(self.fname, memmap=memmap)
         self.phdu = self.hdulist[0]
         self.header = self.phdu.header
         self.wcs = WCS(self.header)
@@ -278,7 +284,11 @@ class FitsData:
     
     def expand_along_axis_from_files(self, name, files:List[File]):
         idx = self.coord_index(name)
-        
+        beams = {
+            "bmaj": [],
+            "bmin": [],
+            "bpa": [],
+        }
         for fname in files:
             with fits.open(fname, memmap=True) as hdul:
                 slc = [slice(None)] * self.ndim
@@ -288,7 +298,7 @@ class FitsData:
                 data = da.asarray(hdul[0].data[slc])
             self.expand_along_axis(name, data)
 
-    def register_beam_info(self):
+    def register_beam_info(self, hdu_index=1, out_units="rad"):
         """
         Get FITS beam information and assign it to a self.beam_info attribute:
         self.beam_info = {\
@@ -301,23 +311,20 @@ class FitsData:
         beam_table = None
         
         try:
-            beam_table = Table.read(self.fname)
+            beam_table = Table.read(self.fname, hdu=hdu_index)
         except ValueError:
             pass
-        
+            
         beam_info = {}
-        beam_info["bmaj"] = np.zeros(self.nchan)
-        beam_info["bmin"] = np.zeros(self.nchan)
-        beam_info["bpa"] = np.zeros(self.nchan)
-    
+        
         if beam_table:
-            bunit = beam_table["BMAJ"].unit
-            for chan in range(self.nchan):
-                beam = beam_table[chan]
-                beam_info["bmaj"][chan] = beam["BMAJ"]
-                beam_info["bmin"][chan] = beam["BMIN"]
-                beam_info["bpa"][chan] = beam["BPA"]
-                
+            beam_info["bmaj"] = beam_table["BMAJ"].to(out_units).value
+            beam_info["bmin"] = beam_table["BMIN"].to(out_units).value
+            beam_info["bpa"] = beam_table["BPA"].to(out_units).value
+            
+            self.beam_info = beam_info
+            return 
+    
         elif header.get(f"BMAJ1", False):
             bunit = self.coords["RA"].attrs["units"]
             for chan in range(self.nchan):
@@ -345,13 +352,11 @@ class FitsData:
         # convert to radians
         if isinstance(bunit, str):
             bunit = getattr(units, bunit)
-        
-        beam_info["bmaj"] = (beam_info["bmaj"]*bunit).to(units.rad).value
-        beam_info["bmin"] = (beam_info["bmin"]*bunit).to(units.rad).value
-        beam_info["bpa"] = (beam_info["bpa"]*bunit).to(units.rad).value
+            beam_info["bmaj"] = (beam_info["bmaj"]*bunit).to(out_units).value
+            beam_info["bmin"] = (beam_info["bmin"]*bunit).to(out_units).value
+            beam_info["bpa"] = (beam_info["bpa"]*bunit).to(out_units).value
         
         self.beam_info = beam_info
-        return 
 
     @property
     def data(self):
