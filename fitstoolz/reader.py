@@ -5,23 +5,18 @@ import numpy as np
 from astropy.wcs import WCS
 from scabha.basetypes import File
 from typing import List, Dict, Any
-from astropy.table import Table
 from astropy.coordinates import SpectralCoord
 from astropy import units
-import warnings
-from astropy.utils.exceptions import AstropyWarning
+from astropy.table import Table
+from fitstoolz.utils import get_beam_table
 
 class FitsData:
-    def __init__(self, fname: str, memmap: bool = True, suppress_FITS_warnings=True):
+    def __init__(self, fname: str, memmap: bool = True):
         self.fname = File(fname)
         if not self.fname.EXISTS:
             raise FileNotFoundError(f"Input FITS file '{fname}' does not exist")
         
-        with warnings.catch_warnings():
-            if suppress_FITS_warnings:
-                warnings.simplefilter('ignore', AstropyWarning)
-            self.hdulist = fits.open(self.fname, memmap=memmap)
-            
+        self.hdulist = fits.open(self.fname, memmap=memmap)
         self.phdu = self.hdulist[0]
         self.header = self.phdu.header
         self.wcs = WCS(self.header)
@@ -30,13 +25,13 @@ class FitsData:
         self.coords = xr.Coordinates()
         self.open_arrays = []
         self.data = da.asarray(self.phdu.data)
-        self.data_units = self.header.get("BUNIT", "jy").lower()
+        self.data_units = self.header.get("BUNIT", "jy").lower().strip()
         
         if self.dshape != self.wcs.array_shape:
             raise RuntimeError("Input FITS file WCS information does not match Image data")
-    
         
-        self.register_dimensions()
+        self.__register_dimensions()
+        self.__register_beam_table()
 
     def coord_index(self, name:str) -> int:
         """
@@ -50,6 +45,10 @@ class FitsData:
         """
         return self.coord_names.index(name)
 
+    @property
+    def nchan(self):
+        return self.coords[self.spectral_coord].size
+
     @property 
     def ndim(self):
         return self.data.ndim
@@ -57,7 +56,6 @@ class FitsData:
     @property
     def dims(self):
         return [self.coords[name].dim for name in self.coord_names]
-        
 
     @property
     def dshape(self):
@@ -70,6 +68,7 @@ class FitsData:
     @data.setter
     def data(self, value):
         self._data = value
+    
     
     def set_coord_attrs(self, name:str, dim:str):
         """ 
@@ -88,7 +87,8 @@ class FitsData:
             "size": self.dshape[idx],
         }
     
-    def register_dimensions(self):
+    
+    def __register_dimensions(self):
         """
         Register (or set) FITS data coordinate and dimension data from the FITS header
         (including WCS information)
@@ -128,6 +128,7 @@ class FitsData:
             
         self.set_celestial_dimensions()
         
+        
     def set_stokes_dimensions(self, coord_name:str):
         """
         Args:
@@ -155,11 +156,11 @@ class FitsData:
         dimgrid = self.wcs.spectral.array_index_to_world_values(da.arange(dimsize))                
         self.coords[coord_name] = ("spectral",), dimgrid
         self.set_coord_attrs(coord_name, "spectral")
-        self.nchan = dimsize
         self.spectral_coord = coord_name
         self.spectral_refpix = self.coords[coord_name].ref_pixel
         self.spectral_units = self.wcs.spectral.world_axis_units[0]
         self.spectral_restfreq = rest_freq or self.header.get("RESTFRQ", None)
+        
         
     def set_celestial_dimensions(self):
         """
@@ -207,6 +208,7 @@ class FitsData:
                                             doppler_rest = rest_freq_Hz*units.Hz,
                                             doppler_convention="radio").value
         
+        
     def get_freq_from_vopt(self, rest_freq_Hz=None):
         """
         Convert radio velocity coordinates to frequencies
@@ -243,7 +245,8 @@ class FitsData:
         if len(self.coord_names) != self.ndim:
             raise RuntimeError(f"New axis '{name}' could not added")
     
-    def expand_along_axis(self, name:str , data:np.ndarray):
+    
+    def expand_along_axis(self, name:str , data:np.ndarray, beams:Table=None):
         """
         Expand data along the given dimension. 
 
@@ -281,14 +284,14 @@ class FitsData:
                 coords[coord] = self.coords[coord]
         self.coords = coords
         self.set_coord_attrs(name, dim)
+        
+        if beams:
+            nbeams = len(beams)
+            for chan in range(nbeams):
+                self.beam_table.add_row(beams[chan])
     
     def expand_along_axis_from_files(self, name, files:List[File]):
         idx = self.coord_index(name)
-        beams = {
-            "bmaj": [],
-            "bmin": [],
-            "bpa": [],
-        }
         for fname in files:
             with fits.open(fname, memmap=True) as hdul:
                 slc = [slice(None)] * self.ndim
@@ -296,43 +299,19 @@ class FitsData:
                     slc[idx] = da.newaxis
                 slc = tuple(slc)
                 data = da.asarray(hdul[0].data[slc])
-            self.expand_along_axis(name, data)
+                beam_table = get_beam_table(fname)
+            self.expand_along_axis(name, data, beam_table)
 
-    def register_beam_info(self, hdu_index=1, out_units="rad"):
-        """
-        Get FITS beam information and assign it to a self.beam_info attribute:
-        self.beam_info = {\
-            "bmaj": <array>,\
-            "bmin": <array>,\
-            "bpa": <array>, \
-        }
-        """
-        header = self.header
-        beam_table = None
+    def __register_beam_table(self, hdu_index=1):
+
+        beam_table = get_beam_table(self.fname, hdu_index=hdu_index)
+        if beam_table is False:
+            self.beam_table = None
+            return
         
-        try:
-            beam_table = Table.read(self.fname, hdu=hdu_index)
-        except ValueError:
-            pass
-            
-        beam_info = {}
-        
-        if beam_table:
-            beam_info["bmaj"] = beam_table["BMAJ"].to(out_units).value
-            beam_info["bmin"] = beam_table["BMIN"].to(out_units).value
-            beam_info["bpa"] = beam_table["BPA"].to(out_units).value
-            
-            self.beam_info = beam_info
-            return 
-    
-        elif header.get(f"BMAJ1", False):
-            bunit = self.coords["RA"].attrs["units"]
-            for chan in range(self.nchan):
-                beam_info["bmaj"][chan] = header[f"BMAJ{chan+1}"]
-                beam_info["bmin"][chan] = header[f"BMIN{chan+1}"]
-                beam_info["bpa"][chan] = header[f"BPA{chan+1}"]
-        elif header.get("BMAJ", False):
-            bunit = self.coords["RA"].attrs["units"]
+        nbeams = len(beam_table)
+                
+        if nbeams == 1:
             if self.spectral_coord == "VRAD":
                 freqs = self.get_freq_from_vrad()
             elif self.spectral_coord == "VOPT":
@@ -342,21 +321,17 @@ class FitsData:
             
             for chan in range(self.nchan):
                 scale_factor = freqs[self.spectral_refpix]/freqs[chan]
-                beam_info["bmaj"][chan] = header[f"BMAJ"] * scale_factor
-                beam_info["bmin"][chan] = header[f"BMIN"] * scale_factor
-                beam_info["bpa"][chan] = header[f"BPA"]
-        else:
-            #TODO(mika): Print warning
-            return
+                new_row = []
+                for col in beam_table.colnames:
+                    if col.lower() in ["bmaj", "bmin"]:
+                        new_row.append( beam_table[col][0] * scale_factor )
+                    elif col.lower() == "chan":
+                        new_row.append(chan)
+                    else:
+                        new_row.append(beam_table[col][0])
+                beam_table.add_row(new_row)
+        self.beam_table = beam_table
         
-        # convert to radians
-        if isinstance(bunit, str):
-            bunit = getattr(units, bunit)
-            beam_info["bmaj"] = (beam_info["bmaj"]*bunit).to(out_units).value
-            beam_info["bmin"] = (beam_info["bmin"]*bunit).to(out_units).value
-            beam_info["bpa"] = (beam_info["bpa"]*bunit).to(out_units).value
-        
-        self.beam_info = beam_info
 
     @property
     def data(self):
