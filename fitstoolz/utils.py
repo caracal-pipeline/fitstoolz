@@ -4,20 +4,11 @@ from astropy.table import Table
 from astropy import units
 
 
-def get_beam_table(fname:File, hdu_index=1, freqs=None):
+def get_beam_table(fname:File):
     fname = File(fname)
     if not fname.EXISTS:
         raise FileNotFoundError(f"Input FITS file '{fname}' does not exist")
-    
-    try:
-        return Table.read(fname, hdu=hdu_index)
-    except ValueError:
-        pass
-    
-    with fits.open(fname) as hdulist:
-        hdulist = fits.open(fname)
-        header = hdulist[0].header
-        
+
     beam_info = {
         "BMAJ": [],
         "BMIN": [],
@@ -25,6 +16,21 @@ def get_beam_table(fname:File, hdu_index=1, freqs=None):
         "CHAN": [],
         "POL": [], # set to I for now
     }
+    
+    beam_table = None
+    # accept the first beam table in hdulist
+    with fits.open(fname) as hdulist:
+        header = hdulist[0].header
+        for hdu in hdulist:
+            if isinstance(hdu, fits.BinTableHDU):
+                tab = Table.read(hdu)
+                if {"BMAJ", "BMIN", "BPA"}.issubset(tab.colnames):
+                    beam_table = tab
+                    break
+                
+    if isinstance(beam_table, Table):
+        return beam_table
+        
     bunit = getattr(units, header["CUNIT1"])
     chan = 1
     
@@ -49,9 +55,3 @@ def get_beam_table(fname:File, hdu_index=1, freqs=None):
         return Table(beam_info)
     else:
         return False
-
-    
-        
-        
-        
-        

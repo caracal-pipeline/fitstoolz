@@ -100,7 +100,8 @@ class FitsData:
         self.pixel_scales = {}
         pixel_scales = self.wcs.pixel_scale_matrix.diagonal()[::-1]
         
-        names = self.coord_names 
+        names = self.coord_names
+        celestial_already_set = False 
         for idx,coord in enumerate(names):
             self.pixel_scales[coord] = pixel_scales[idx]
             diminfo = self.dim_info[idx]
@@ -108,8 +109,13 @@ class FitsData:
             dtype = diminfo["group"]
             
             if dim == "celestial":
+                if celestial_already_set:
+                    continue
+                #these only need to be set once
+                self.set_celestial_dimensions()
+                celestial_already_set = True
                 continue
-            elif dim == "spectral":    
+            elif dim == "spectral": 
                 self.set_spectral_dimension(coord)
                 continue
             elif dim == "stokes":
@@ -125,8 +131,6 @@ class FitsData:
                 
             self.coords[coord] = (dim,), dimgrid
             self.set_coord_attrs(coord, dim)
-            
-        self.set_celestial_dimensions()
         
         
     def set_stokes_dimensions(self, coord_name:str):
@@ -184,14 +188,18 @@ class FitsData:
         dec_dim = self.wcs.axis_type_names[::-1 ][dec_idx]
         ra_dimsize = self.dshape[ra_idx]
         dec_dimsize = self.dshape[dec_idx]
+        ra_scale = self.pixel_scales[ra_dim] = self.header[f"CDELT{self.ndim - ra_idx}"]
+        dec_scale = self.pixel_scales [dec_dim] = self.header[f"CDELT{self.ndim - ra_idx}"]
             
-        grid = self.wcs.celestial.array_index_to_world_values(da.arange(ra_dimsize),
-                                        da.arange(dec_dimsize))
+        grid_zero = self.wcs.celestial.array_index_to_world_values([0],[0])
         
-        self.coords[ra_dim] = ("celestial.ra",), grid[0]
+        ra_grid = da.linspace(grid_zero[0], grid_zero[0] + ra_scale*ra_dimsize, ra_dimsize)
+        dec_grid = da.linspace(grid_zero[1], grid_zero[1] + dec_scale*dec_dimsize, dec_dimsize)
+        
+        self.coords[ra_dim] = ("celestial.ra",), ra_grid
         self.set_coord_attrs(ra_dim, "celestial.ra")
         
-        self.coords[dec_dim] = ("celestial.dec",), grid[1]
+        self.coords[dec_dim] = ("celestial.dec",), dec_grid
         self.set_coord_attrs(dec_dim, "celestial.dec")
 
         
@@ -302,9 +310,9 @@ class FitsData:
                 beam_table = get_beam_table(fname)
             self.expand_along_axis(name, data, beam_table)
 
-    def __register_beam_table(self, hdu_index=1):
+    def __register_beam_table(self):
 
-        beam_table = get_beam_table(self.fname, hdu_index=hdu_index)
+        beam_table = get_beam_table(self.fname)
         if beam_table is False:
             self.beam_table = None
             return
