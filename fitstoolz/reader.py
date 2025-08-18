@@ -157,7 +157,7 @@ class FitsData:
         idx = self.coord_index(coord_name)
         dimsize = self.dshape[idx]
         
-        dimgrid = self.wcs.spectral.array_index_to_world_values(da.arange(dimsize))                
+        dimgrid = self.wcs.spectral.array_index_to_world_values(da.arange(dimsize))
         self.coords[coord_name] = ("spectral",), dimgrid
         self.set_coord_attrs(coord_name, "spectral")
         self.spectral_coord = coord_name
@@ -231,7 +231,7 @@ class FitsData:
                                             doppler_convention="optical").value
 
     
-    def add_axis(self, name:str, idx:int, coord_type:str, axis_grid:np.ndarray, attrs:Dict):
+    def add_axis(self, name:str, idx:int, coord_type:str, axis_grid:np.ndarray, attrs:Dict, update_header=True):
         """ Add a new axis to FITS data
 
         Args:
@@ -252,6 +252,16 @@ class FitsData:
         self.coord_names.insert(idx, name)
         if len(self.coord_names) != self.ndim:
             raise RuntimeError(f"New axis '{name}' could not added")
+        if update_header:
+            naxis = self.ndim - idx
+            crpix =attrs["ref_pixel"] 
+            self.header.update({
+            f"CDELT{naxis}": attrs["pixel_size"],
+            f"CRPIX{naxis}": crpix + 1, # FITS files are 1-based indexing
+            f"CUNIT{naxis}": attrs.get("units", ""),
+            f"CRVAL{naxis}": axis_grid[crpix],
+            })
+        self.set_coord_attrs(name)
     
     
     def expand_along_axis(self, name:str , data:np.ndarray, beams:Table=None):
@@ -298,6 +308,7 @@ class FitsData:
             for chan in range(nbeams):
                 self.beam_table.add_row(beams[chan])
     
+    
     def expand_along_axis_from_files(self, name, files:List[File]):
         idx = self.coord_index(name)
         for fname in files:
@@ -309,6 +320,7 @@ class FitsData:
                 data = da.asarray(hdul[0].data[slc])
                 beam_table = get_beam_table(fname)
             self.expand_along_axis(name, data, beam_table)
+
 
     def __register_beam_table(self):
 
@@ -382,8 +394,14 @@ class FitsData:
             data_slice = [slice(None)]*self.ndim
         
         data = da.asarray(self.data[tuple(data_slice)])
+        
+        # Create a new coordinate instance to ensure alignment with the data
+        coords = xr.Coordinates()
+        for coord in self.coord_names:
+            coords[coord] = self.coords[coord]
+            
         xds = xr.DataArray(data,
-            coords = self.coords,
+            coords = coords,
             attrs = {
                 "header": dict(self.header.items()),
             },
