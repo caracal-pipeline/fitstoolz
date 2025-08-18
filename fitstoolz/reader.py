@@ -80,7 +80,7 @@ class FitsData:
         idx = self.coord_index(name)
         self.coords[name].attrs = {
             "name": name,
-            "pixel_size": self.pixel_scales[name],
+            "pixel_size": self.header[f"CDELT{self.ndim - idx}"],
             "dim": dim,
             "ref_pixel": int(self.header[f"CRPIX{self.ndim - idx }"]) - 1, # FITS indexing is 1-based
             "units": self.wcs.world_axis_units[::-1][idx],
@@ -97,13 +97,9 @@ class FitsData:
             set_dims (List[str]): FITS coordinates (celestial, spectral, etc.) that must be set according to header WCS information. For example, if 'celestial' is part of this list, then the RA and DEC coordinate grid will be populated using the header WCS instead a dummy array. Avoid inlcuding dimesions for which you will need the coordinate grids for.
         """
 
-        self.pixel_scales = {}
-        pixel_scales = self.wcs.pixel_scale_matrix.diagonal()[::-1]
-        
         names = self.coord_names
         celestial_already_set = False 
         for idx,coord in enumerate(names):
-            self.pixel_scales[coord] = pixel_scales[idx]
             diminfo = self.dim_info[idx]
             dim = diminfo["coordinate_type"]
             dtype = diminfo["group"]
@@ -188,8 +184,8 @@ class FitsData:
         dec_dim = self.wcs.axis_type_names[::-1 ][dec_idx]
         ra_dimsize = self.dshape[ra_idx]
         dec_dimsize = self.dshape[dec_idx]
-        ra_scale = self.pixel_scales[ra_dim] = self.header[f"CDELT{self.ndim - ra_idx}"]
-        dec_scale = self.pixel_scales [dec_dim] = self.header[f"CDELT{self.ndim - ra_idx}"]
+        ra_scale = self.header[f"CDELT{self.ndim - ra_idx}"]
+        dec_scale = self.header[f"CDELT{self.ndim - ra_idx}"]
             
         grid_zero = self.wcs.celestial.array_index_to_world_values([0],[0])
         
@@ -231,7 +227,7 @@ class FitsData:
                                             doppler_convention="optical").value
 
     
-    def add_axis(self, name:str, idx:int, coord_type:str, axis_grid:np.ndarray, attrs:Dict, update_header=True):
+    def add_axis(self, name:str, idx:int, coord_type:str, axis_grid:np.ndarray, attrs:Dict):
         """ Add a new axis to FITS data
 
         Args:
@@ -252,16 +248,17 @@ class FitsData:
         self.coord_names.insert(idx, name)
         if len(self.coord_names) != self.ndim:
             raise RuntimeError(f"New axis '{name}' could not added")
-        if update_header:
-            naxis = self.ndim - idx
-            crpix =attrs["ref_pixel"] 
-            self.header.update({
+        
+        naxis = self.ndim - idx
+        crpix = attrs["ref_pixel"] 
+        self.header.update({
             f"CDELT{naxis}": attrs["pixel_size"],
             f"CRPIX{naxis}": crpix + 1, # FITS files are 1-based indexing
             f"CUNIT{naxis}": attrs.get("units", ""),
             f"CRVAL{naxis}": axis_grid[crpix],
             })
-        self.set_coord_attrs(name)
+        self.wcs = WCS(header=self.header)
+        self.set_coord_attrs(name,coord_type)
     
     
     def expand_along_axis(self, name:str , data:np.ndarray, beams:Table=None):
