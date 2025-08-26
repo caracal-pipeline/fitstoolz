@@ -96,7 +96,8 @@ class FitsData:
         Args:
             set_dims (List[str]): FITS coordinates (celestial, spectral, etc.) that must be set according to header WCS information. For example, if 'celestial' is part of this list, then the RA and DEC coordinate grid will be populated using the header WCS instead a dummy array. Avoid inlcuding dimesions for which you will need the coordinate grids for.
         """
-
+        # Ensure fresh start
+        self.coords = xr.Coordinates()
         names = self.coord_names
         celestial_already_set = False 
         for idx,coord in enumerate(names):
@@ -243,11 +244,6 @@ class FitsData:
         slc = [slice(None)] * (self.ndim + 1)
         slc[idx] = da.newaxis
         self.data = self.data[tuple(slc)]
-        self.coords[name] = (coord_type,), axis_grid
-        self.coords[name].attrs = attrs
-        self.coord_names.insert(idx, name)
-        if len(self.coord_names) != self.ndim:
-            raise RuntimeError(f"New axis '{name}' could not added")
         
         naxis = self.ndim - idx
         crpix = attrs["ref_pixel"] 
@@ -255,10 +251,18 @@ class FitsData:
             f"CDELT{naxis}": attrs["pixel_size"],
             f"CRPIX{naxis}": crpix + 1, # FITS files are 1-based indexing
             f"CUNIT{naxis}": attrs.get("units", ""),
-            f"CRVAL{naxis}": axis_grid[crpix],
+            f"CRVAL{naxis}": da.compute(axis_grid[crpix])[0],
+            f"CTYPE{naxis}": name,
+            f"NAXIS{naxis}": 1,
+            "NAXIS": self.ndim,
             })
-        self.wcs = WCS(header=self.header)
-        self.set_coord_attrs(name,coord_type)
+        self.wcs = WCS(self.header)
+        self.dim_info = self.wcs.get_axis_types()[::-1]
+        self.coord_names.insert(idx, name)
+        self.__register_dimensions()
+
+        if len(self.coord_names) != self.ndim:
+            raise RuntimeError(f"New axis '{name}' could not added")
     
     
     def expand_along_axis(self, name:str , data:np.ndarray, beams:Table=None):

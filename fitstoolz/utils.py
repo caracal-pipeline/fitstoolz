@@ -31,7 +31,7 @@ def get_beam_table(fname:File):
     if isinstance(beam_table, Table):
         return beam_table
         
-    bunit = getattr(units, header["CUNIT1"])
+    bunit = getattr(units, header["CUNIT1"].lower().strip())
     chan = 1
     
     while header.get(f"BMAJ{chan}", None) is not None:
