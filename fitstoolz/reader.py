@@ -332,27 +332,29 @@ class FitsData:
         
         nbeams = len(beam_table)
                 
-        if nbeams == 1:
+        if nbeams == 1 and self.coords[self.spectral_coord].size > 1:
             if self.spectral_coord == "VRAD":
                 freqs = self.get_freq_from_vrad()
             elif self.spectral_coord == "VOPT":
                 freqs = self.get_freq_from_vopt()
             else:
                 freqs = self.coords["FREQ"].data
-            
-            for chan in range(self.nchan):
-                scale_factor = freqs[self.spectral_refpix]/freqs[chan]
-                new_row = []
-                for col in beam_table.colnames:
+            new_table = {}
+            for col in beam_table.colnames:
+                col_data = np.zeros(self.nchan, dtype=beam_table[col].dtype)
+                for chan in range(self.nchan):
+                    scale_factor = freqs[self.spectral_refpix]/freqs[chan]
                     if col.lower() in ["bmaj", "bmin"]:
-                        new_row.append( beam_table[col][0] * scale_factor )
+                        col_data[chan] = beam_table[col][0] * scale_factor
                     elif col.lower() == "chan":
-                        new_row.append(chan)
+                        col_data[chan] = chan
                     else:
-                        new_row.append(beam_table[col][0])
-                beam_table.add_row(new_row)
+                        col_data[chan] = beam_table[col][0]
+                col_unit = getattr(beam_table[col], "unit", None) or 1
+                new_table[col] = col_data * col_unit
+            beam_table = Table(new_table)
+
         self.beam_table = beam_table
-        
 
     @property
     def data(self):

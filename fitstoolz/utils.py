@@ -50,7 +50,7 @@ def get_beam_table(fname:File):
         beam_info["POL"].append( 0 )
         
         chan = 2
-    
+   
     if chan > 1:
         return Table(beam_info)
     else:
