@@ -1,22 +1,9 @@
-from __future__ import annotations
+"""The `fitstoolz` command-line apps, one module per subcommand.
 
-from pydantic import BaseModel
+Each is a `@shinobi.pystep` plus a `click.Command` built from it by
+`_cli.make_command`; `main.py` assembles them into the one lazy group.
+"""
 
+from ._outputs import FitsOutputs, outfits_name
 
-class FitsOutputs(BaseModel):
-    """Path of the FITS file an app wrote, so it can be wired into a shinobi
-    Recipe (or consumed as a dosho tool) as the input of a following step."""
-
-    outfile: str | None = None
-
-
-def outfits_name(infile, outfile, replace=False, raise_exception=False):
-    if outfile:
-        return outfile
-    elif replace:
-        return infile
-    else:
-        if raise_exception:
-            raise RuntimeError("Both --replace and --outfile are not set. Cannot modify FITS file(s).")
-        else:
-            return None
+__all__ = ["FitsOutputs", "outfits_name"]

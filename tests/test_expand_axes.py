@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 
@@ -6,10 +7,10 @@ import pytest
 from astropy.io import fits
 from astropy.wcs import WCS
 
-from fitstoolz import set_logger
+from fitstoolz import LOGGER
 from fitstoolz.reader import FitsData
 
-log = set_logger("fitstoolz")
+log = logging.getLogger(LOGGER)
 
 TESTDIR = os.path.abspath(os.path.dirname(__file__))
 
