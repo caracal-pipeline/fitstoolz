@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 import dask.array as da
@@ -7,7 +8,7 @@ import numpy as np
 import shinobi
 from pydantic import BaseModel, Field
 
-from fitstoolz import set_logger
+from fitstoolz import LOGGER
 from fitstoolz.apps._cli import make_command
 from fitstoolz.reader import FitsData
 
@@ -24,7 +25,7 @@ class StatsOutputs(BaseModel):
 
 
 def runit(opts):
-    log = set_logger("fitstoolz", level=opts.log_level)
+    log = logging.getLogger(LOGGER)
 
     with FitsData(fname=opts.fname, memmap=True) as myfits:
         data = myfits.data

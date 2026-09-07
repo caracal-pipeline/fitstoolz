@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 import shinobi
 from pydantic import BaseModel, Field
 
-from fitstoolz import set_logger
+from fitstoolz import LOGGER
 from fitstoolz.apps._cli import make_command
 from fitstoolz.reader import FitsData
 
@@ -19,7 +20,7 @@ class StackOutputs(BaseModel):
 
 
 def runit(opts):
-    log = set_logger("fitstoolz", level=opts.log_level)
+    log = logging.getLogger(LOGGER)
 
     fname0 = opts.fname
     fnames = opts.extra_files or []

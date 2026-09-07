@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 import shinobi
 from pydantic import Field
 
-from fitstoolz import set_logger
+from fitstoolz import LOGGER
 from fitstoolz.apps import FitsOutputs, outfits_name
 from fitstoolz.apps._cli import make_command
 from fitstoolz.reader import FitsData
@@ -14,7 +15,7 @@ app = "add-axis"
 
 
 def runit(opts):
-    log = set_logger("fitstoolz", level=opts.log_level)
+    log = logging.getLogger(LOGGER)
     outfits = outfits_name(opts.fname, opts.outfile, opts.replace, raise_exception=True)
 
     with FitsData(fname=opts.fname, memmap=True) as myfits:
